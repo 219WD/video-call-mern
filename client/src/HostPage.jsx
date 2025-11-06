@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { v4 as uuidv4 } from 'uuid';
+import { useNavigate } from 'react-router-dom';
 
 const HostPage = () => {
   const [roomId, setRoomId] = useState('');
   const [qrUrl, setQrUrl] = useState('');
+  const navigate = useNavigate();
 
   const generateRoom = () => {
     const newRoomId = uuidv4().slice(0, 8);
     setRoomId(newRoomId);
     setQrUrl(`${window.location.origin}/join/${newRoomId}`);
+    navigate(`/room/${newRoomId}`); // Host entra a su sala
   };
 
   return (
@@ -21,7 +24,7 @@ const HostPage = () => {
       {qrUrl && (
         <div style={styles.qrContainer}>
           <QRCodeCanvas value={qrUrl} size={200} />
-          <p style={styles.link}>Escanea: <strong>{roomId}</strong></p>
+          <p style={styles.link}>Sala: <strong>{roomId}</strong></p>
         </div>
       )}
     </div>

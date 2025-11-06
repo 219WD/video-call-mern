@@ -1,8 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import HostPage from './HostPage.jsx';
-import GuestPage from './GuestPage.jsx';
-import VideoCall from './VideoCall.jsx';
+import HostPage from './HostPage';
+import GuestPage from './GuestPage';
+import HostRoom from './HostRoom';
+import VideoCall from './VideoCall';
 
 function App() {
   return (
@@ -10,6 +11,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HostPage />} />
         <Route path="/join/:roomId" element={<GuestPage />} />
+        <Route path="/room/:roomId" element={<HostRoom />} />
         <Route path="/call/:roomId" element={<VideoCall />} />
       </Routes>
     </Router>

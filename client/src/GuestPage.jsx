@@ -12,7 +12,7 @@ const GuestPage = () => {
   return (
     <div style={styles.container}>
       <button onClick={startCall} style={styles.callButton}>
-        📞 LLAMAR
+        LLAMAR
       </button>
       <p style={styles.info}>Sala: <strong>{roomId}</strong></p>
     </div>

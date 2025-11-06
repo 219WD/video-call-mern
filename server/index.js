@@ -12,10 +12,7 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+  cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
 app.use(cors());
@@ -26,58 +23,63 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB conectado'))
   .catch(err => console.error('Error MongoDB:', err));
 
-// Almacén temporal de rooms (hostId por roomId)
-const rooms = {}; // { roomId: { hostId: socket.id } }
+// Almacén de salas: { roomId: { hostId: socket.id } }
+const rooms = {};
 
 io.on('connection', (socket) => {
-  console.log('Usuario conectado:', socket.id);
+  console.log('CONEXIÓN:', socket.id);
 
+  // Unirse a sala
   socket.on('join-room', ({ roomId, role }) => {
     socket.join(roomId);
-    socket.role = role;
     socket.roomId = roomId;
+    socket.role = role;
 
     if (role === 'host') {
       rooms[roomId] = { hostId: socket.id };
-      console.log(`HOST ${socket.id} creó sala ${roomId}`);
+      console.log(`HOST unido: ${socket.id} → sala ${roomId}`);
     } else if (role === 'guest') {
-      console.log(`GUEST ${socket.id} se unió a sala ${roomId} (host: ${rooms[roomId]?.hostId || 'NO HOST'})`);
+      console.log(`GUEST unido: ${socket.id} → sala ${roomId}`);
+      // Notificar al host que hay un guest listo
+      const hostId = rooms[roomId]?.hostId;
+      if (hostId) {
+        io.to(hostId).emit('guest-joined');
+      }
     }
   });
 
-  // Guest envía oferta → solo al HOST
+  // Guest envía oferta
   socket.on('call-offer', ({ offer, roomId }) => {
     const hostId = rooms[roomId]?.hostId;
     if (hostId) {
+      console.log(`OFERTA de ${socket.id} → HOST ${hostId}`);
       io.to(hostId).emit('incoming-call', { offer, from: socket.id });
-      console.log(`Oferta enviada de ${socket.id} a HOST ${hostId} en sala ${roomId}`);
     } else {
       console.log(`ERROR: No hay host en sala ${roomId}`);
-      socket.emit('error', { message: 'No hay host disponible en la sala' });
+      socket.emit('error', { message: 'Host no disponible' });
     }
   });
 
-  // Host acepta → envía answer al GUEST específico
+  // Host acepta
   socket.on('accept-call', ({ answer, to }) => {
+    console.log(`ANSWER de host ${socket.id} → guest ${to}`);
     io.to(to).emit('call-accepted', { answer });
-    console.log(`Host ${socket.id} aceptó, answer enviado a guest ${to}`);
   });
 
-  // ICE candidates: envía al peer específico (NO al room)
+  // ICE
   socket.on('ice-candidate', ({ candidate, to }) => {
     io.to(to).emit('new-ice-candidate', candidate);
-    console.log(`ICE candidate de ${socket.id} a ${to}`);
   });
 
+  // Finalizar
   socket.on('end-call', ({ roomId }) => {
     io.to(roomId).emit('call-ended');
-    console.log(`Llamada terminada en sala ${roomId}`);
-    delete rooms[roomId]; // Limpia room
+    delete rooms[roomId];
   });
 
   socket.on('disconnect', () => {
-    console.log('Usuario desconectado:', socket.id);
-    if (socket.role === 'host' && socket.roomId && rooms[socket.roomId]) {
+    console.log('DESCONECTADO:', socket.id);
+    if (socket.role === 'host' && socket.roomId) {
       delete rooms[socket.roomId];
     }
     if (socket.roomId) {

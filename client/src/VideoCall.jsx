@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 
@@ -11,44 +11,30 @@ const VideoCall = () => {
   const localVideo = useRef();
   const remoteVideo = useRef();
   const pc = useRef(null);
-  const [calling, setCalling] = useState(true);
-  const [hostId, setHostId] = useState(null);
   const localStream = useRef(null);
 
   useEffect(() => {
+    // Media
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         localVideo.current.srcObject = stream;
         localStream.current = stream;
         setupWebRTC(stream);
-      })
-      .catch(err => {
-        console.error('Error media:', err);
-        alert('Error en cámara/micrófono: ' + err.message);
       });
 
+    // Unirse como guest
     socket.emit('join-room', { roomId, role: 'guest' });
 
-    socket.on('incoming-call', () => {}); // No aplica para guest
-
+    // Recibir answer
     socket.on('call-accepted', async ({ answer }) => {
-      console.log('Guest recibió answer del host');
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
-      setCalling(false);
     });
 
     socket.on('new-ice-candidate', async (candidate) => {
-      if (pc.current) {
-        await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
-      }
+      if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    socket.on('error', ({ message }) => {
-      alert(message);
-      endCall();
-    });
-
-    socket.on('call-ended', endCall);
+    socket.on('call-ended', () => navigate('/'));
 
     return () => socket.off();
   }, [roomId]);
@@ -61,26 +47,21 @@ const VideoCall = () => {
 
     pc.current.ontrack = (e) => {
       remoteVideo.current.srcObject = e.streams[0];
-      console.log('Guest recibió track remoto');
     };
 
     pc.current.onicecandidate = (e) => {
-      if (e.candidate && hostId) {
-        socket.emit('ice-candidate', { candidate: e.candidate, to: hostId });
+      if (e.candidate) {
+        socket.emit('ice-candidate', { candidate: e.candidate, to: roomId });
       }
     };
 
-    initiateCall();
-  };
-
-  const initiateCall = async () => {
-    // Espera un poco para que el host se una
+    // ENVÍA OFERTA INMEDIATA
     setTimeout(async () => {
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
       socket.emit('call-offer', { offer, roomId });
-      console.log('Guest envió oferta a sala', roomId);
-    }, 1000); // Delay para sincronizar
+      console.log('OFERTA ENVIADA');
+    }, 1500);
   };
 
   const endCall = () => {
@@ -91,20 +72,15 @@ const VideoCall = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <h2>Llamando a sala {roomId}</h2>
-      <video ref={localVideo} autoPlay muted playsInline style={styles.video} />
-      {calling && <p>Conectando... (espera a que el host acepte)</p>}
-      {!calling && <video ref={remoteVideo} autoPlay playsInline style={styles.video} />}
-      <button onClick={endCall} style={styles.end}>Colgar</button>
+    <div style={{ textAlign: 'center', padding: '20px' }}>
+      <h2>Llamando...</h2>
+      <video ref={localVideo} autoPlay muted playsInline style={{ width: '300px', borderRadius: '8px' }} />
+      <video ref={remoteVideo} autoPlay playsInline style={{ width: '300px', borderRadius: '8px', marginTop: '20px' }} />
+      <button onClick={endCall} style={{ marginTop: '20px', padding: '10px 20px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>
+        Colgar
+      </button>
     </div>
   );
-};
-
-const styles = {
-  container: { textAlign: 'center', padding: '20px' },
-  video: { width: '300px', border: '2px solid #007bff', borderRadius: '8px', margin: '10px' },
-  end: { background: '#dc3545', color: 'white', padding: '10px 20px', margin: '10px', border: 'none', borderRadius: '4px' }
 };
 
 export default VideoCall;

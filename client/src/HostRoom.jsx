@@ -19,27 +19,21 @@ const HostRoom = () => {
       .then(stream => {
         localVideo.current.srcObject = stream;
         localStream.current = stream;
-      })
-      .catch(err => console.error('Error media:', err));
+      });
 
     socket.emit('join-room', { roomId, role: 'host' });
 
     socket.on('incoming-call', ({ offer, from }) => {
-      console.log('Host recibió oferta de guest', from);
+      console.log('LLAMADA ENTRANTE');
       setIncomingCall({ offer, from });
-    });
-
-    socket.on('call-accepted', ({ answer }) => {
-      // No aplica para host
+      new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-tone-1057.mp3').play().catch(() => {});
     });
 
     socket.on('new-ice-candidate', async (candidate) => {
-      if (pc.current) {
-        await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
-      }
+      if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    socket.on('call-ended', endCall);
+    socket.on('call-ended', () => navigate('/'));
 
     return () => socket.off();
   }, [roomId]);
@@ -52,7 +46,6 @@ const HostRoom = () => {
 
     pc.current.ontrack = (e) => {
       remoteVideo.current.srcObject = e.streams[0];
-      console.log('Host recibió track remoto');
     };
 
     pc.current.onicecandidate = (e) => {
@@ -66,7 +59,6 @@ const HostRoom = () => {
     await pc.current.setLocalDescription(answer);
     socket.emit('accept-call', { answer, to: incomingCall.from });
     setIncomingCall(null);
-    console.log('Host envió answer al guest');
   };
 
   const endCall = () => {
@@ -77,31 +69,28 @@ const HostRoom = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <h2>Sala: {roomId} (Host)</h2>
-      <video ref={localVideo} autoPlay muted playsInline style={styles.video} />
+    <div style={{ textAlign: 'center', padding: '20px' }}>
+      <h2>Sala: {roomId}</h2>
+      <video ref={localVideo} autoPlay muted playsInline style={{ width: '300px', borderRadius: '8px' }} />
       {incomingCall ? (
-        <div style={styles.alert}>
-          <p>📞 Llamada entrante de invitado</p>
-          <button onClick={acceptCall} style={styles.accept}>Aceptar</button>
-          <button onClick={() => setIncomingCall(null)} style={styles.decline}>Rechazar</button>
+        <div style={{ background: '#fff3cd', padding: '15px', borderRadius: '8px', margin: '20px' }}>
+          <p>LLAMADA ENTRANTE!</p>
+          <button onClick={acceptCall} style={{ background: '#28a745', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' }}>
+            Aceptar
+          </button>
+          <button onClick={() => setIncomingCall(null)} style={{ background: '#dc3545', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' }}>
+            Rechazar
+          </button>
         </div>
       ) : (
         <p>Esperando llamada...</p>
       )}
-      <video ref={remoteVideo} autoPlay playsInline style={styles.video} />
-      <button onClick={endCall} style={styles.end}>Salir</button>
+      <video ref={remoteVideo} autoPlay playsInline style={{ width: '300px', borderRadius: '8px', marginTop: '20px' }} />
+      <button onClick={endCall} style={{ marginTop: '20px', padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '4px' }}>
+        Salir
+      </button>
     </div>
   );
-};
-
-const styles = {
-  container: { textAlign: 'center', padding: '20px' },
-  video: { width: '300px', border: '2px solid #28a745', borderRadius: '8px', margin: '10px' },
-  alert: { background: '#fff3cd', padding: '15px', borderRadius: '8px', margin: '20px' },
-  accept: { background: '#28a745', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' },
-  decline: { background: '#dc3545', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' },
-  end: { background: '#6c757d', color: 'white', padding: '10px 20px', margin: '10px', border: 'none', borderRadius: '4px' }
 };
 
 export default HostRoom;

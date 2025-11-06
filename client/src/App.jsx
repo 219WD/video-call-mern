@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HostPage from './HostPage';
 import GuestPage from './GuestPage';
-import HostRoom from './HostRoom';
+import HostRoom from './HostRoom.jsx';
 import VideoCall from './VideoCall';
 
 function App() {

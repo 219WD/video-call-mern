@@ -12,23 +12,40 @@ const VideoCall = () => {
   const remoteVideo = useRef();
   const pc = useRef(null);
   const [calling, setCalling] = useState(true);
+  const [hostId, setHostId] = useState(null);
+  const localStream = useRef(null);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         localVideo.current.srcObject = stream;
+        localStream.current = stream;
         setupWebRTC(stream);
+      })
+      .catch(err => {
+        console.error('Error media:', err);
+        alert('Error en cámara/micrófono: ' + err.message);
       });
 
     socket.emit('join-room', { roomId, role: 'guest' });
 
+    socket.on('incoming-call', () => {}); // No aplica para guest
+
     socket.on('call-accepted', async ({ answer }) => {
+      console.log('Guest recibió answer del host');
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
       setCalling(false);
     });
 
     socket.on('new-ice-candidate', async (candidate) => {
-      if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
+      if (pc.current) {
+        await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    });
+
+    socket.on('error', ({ message }) => {
+      alert(message);
+      endCall();
     });
 
     socket.on('call-ended', endCall);
@@ -44,11 +61,12 @@ const VideoCall = () => {
 
     pc.current.ontrack = (e) => {
       remoteVideo.current.srcObject = e.streams[0];
+      console.log('Guest recibió track remoto');
     };
 
     pc.current.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit('ice-candidate', { candidate: e.candidate, to: roomId });
+      if (e.candidate && hostId) {
+        socket.emit('ice-candidate', { candidate: e.candidate, to: hostId });
       }
     };
 
@@ -56,23 +74,27 @@ const VideoCall = () => {
   };
 
   const initiateCall = async () => {
-    const offer = await pc.current.createOffer();
-    await pc.current.setLocalDescription(offer);
-    socket.emit('call-offer', { offer, roomId });
+    // Espera un poco para que el host se una
+    setTimeout(async () => {
+      const offer = await pc.current.createOffer();
+      await pc.current.setLocalDescription(offer);
+      socket.emit('call-offer', { offer, roomId });
+      console.log('Guest envió oferta a sala', roomId);
+    }, 1000); // Delay para sincronizar
   };
 
   const endCall = () => {
     if (pc.current) pc.current.close();
-    if (localVideo.current?.srcObject) localVideo.current.srcObject.getTracks().forEach(t => t.stop());
+    if (localStream.current) localStream.current.getTracks().forEach(t => t.stop());
     socket.emit('end-call', { roomId });
     navigate('/');
   };
 
   return (
     <div style={styles.container}>
-      <h2>Llamando... {roomId}</h2>
+      <h2>Llamando a sala {roomId}</h2>
       <video ref={localVideo} autoPlay muted playsInline style={styles.video} />
-      {calling && <p>Llamando...</p>}
+      {calling && <p>Conectando... (espera a que el host acepte)</p>}
       {!calling && <video ref={remoteVideo} autoPlay playsInline style={styles.video} />}
       <button onClick={endCall} style={styles.end}>Colgar</button>
     </div>
@@ -81,7 +103,7 @@ const VideoCall = () => {
 
 const styles = {
   container: { textAlign: 'center', padding: '20px' },
-  video: { width: '300px', borderRadius: '8px', margin: '10px' },
+  video: { width: '300px', border: '2px solid #007bff', borderRadius: '8px', margin: '10px' },
   end: { background: '#dc3545', color: 'white', padding: '10px 20px', margin: '10px', border: 'none', borderRadius: '4px' }
 };
 

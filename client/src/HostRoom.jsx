@@ -12,27 +12,31 @@ const HostRoom = () => {
   const remoteVideo = useRef();
   const pc = useRef(null);
   const [incomingCall, setIncomingCall] = useState(null);
-  const [localStream, setLocalStream] = useState(null);
+  const localStream = useRef(null);
 
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         localVideo.current.srcObject = stream;
-        setLocalStream(stream);
-      });
+        localStream.current = stream;
+      })
+      .catch(err => console.error('Error media:', err));
 
     socket.emit('join-room', { roomId, role: 'host' });
 
     socket.on('incoming-call', ({ offer, from }) => {
+      console.log('Host recibió oferta de guest', from);
       setIncomingCall({ offer, from });
     });
 
     socket.on('call-accepted', ({ answer }) => {
-      if (pc.current) pc.current.setRemoteDescription(new RTCSessionDescription(answer));
+      // No aplica para host
     });
 
     socket.on('new-ice-candidate', async (candidate) => {
-      if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
+      if (pc.current) {
+        await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
+      }
     });
 
     socket.on('call-ended', endCall);
@@ -44,10 +48,11 @@ const HostRoom = () => {
     const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     pc.current = new RTCPeerConnection(config);
 
-    localStream.getTracks().forEach(track => pc.current.addTrack(track, localStream));
+    localStream.current.getTracks().forEach(track => pc.current.addTrack(track, localStream.current));
 
     pc.current.ontrack = (e) => {
       remoteVideo.current.srcObject = e.streams[0];
+      console.log('Host recibió track remoto');
     };
 
     pc.current.onicecandidate = (e) => {
@@ -61,29 +66,30 @@ const HostRoom = () => {
     await pc.current.setLocalDescription(answer);
     socket.emit('accept-call', { answer, to: incomingCall.from });
     setIncomingCall(null);
+    console.log('Host envió answer al guest');
   };
 
   const endCall = () => {
     if (pc.current) pc.current.close();
-    if (localVideo.current?.srcObject) localVideo.current.srcObject.getTracks().forEach(t => t.stop());
+    if (localStream.current) localStream.current.getTracks().forEach(t => t.stop());
     socket.emit('end-call', { roomId });
     navigate('/');
   };
 
   return (
     <div style={styles.container}>
-      <h2>Sala: {roomId}</h2>
+      <h2>Sala: {roomId} (Host)</h2>
       <video ref={localVideo} autoPlay muted playsInline style={styles.video} />
       {incomingCall ? (
         <div style={styles.alert}>
-          <p>Llamada entrante!</p>
+          <p>📞 Llamada entrante de invitado</p>
           <button onClick={acceptCall} style={styles.accept}>Aceptar</button>
           <button onClick={() => setIncomingCall(null)} style={styles.decline}>Rechazar</button>
         </div>
       ) : (
         <p>Esperando llamada...</p>
       )}
-      {incomingCall === null && <video ref={remoteVideo} autoPlay playsInline style={styles.video} />}
+      <video ref={remoteVideo} autoPlay playsInline style={styles.video} />
       <button onClick={endCall} style={styles.end}>Salir</button>
     </div>
   );
@@ -91,7 +97,7 @@ const HostRoom = () => {
 
 const styles = {
   container: { textAlign: 'center', padding: '20px' },
-  video: { width: '300px', borderRadius: '8px', margin: '10px' },
+  video: { width: '300px', border: '2px solid #28a745', borderRadius: '8px', margin: '10px' },
   alert: { background: '#fff3cd', padding: '15px', borderRadius: '8px', margin: '20px' },
   accept: { background: '#28a745', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' },
   decline: { background: '#dc3545', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' },

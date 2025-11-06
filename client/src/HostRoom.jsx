@@ -11,7 +11,8 @@ const HostRoom = () => {
   const localVideo = useRef();
   const remoteVideo = useRef();
   const pc = useRef(null);
-  const [incomingCall, setIncomingCall] = useState(null);
+  const [calling, setCalling] = useState(false);
+  const [guestId, setGuestId] = useState(null);
   const localStream = useRef(null);
 
   useEffect(() => {
@@ -23,74 +24,78 @@ const HostRoom = () => {
 
     socket.emit('join-room', { roomId, role: 'host' });
 
-    socket.on('incoming-call', ({ offer, from }) => {
-      console.log('LLAMADA ENTRANTE');
-      setIncomingCall({ offer, from });
-      new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-tone-1057.mp3').play().catch(() => {});
+    socket.on('ring', () => {
+      setCalling(true);
+      new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-tone-1057.mp3').play();
     });
 
-    socket.on('new-ice-candidate', async (candidate) => {
+    socket.on('offer', async ({ offer, from }) => {
+      setGuestId(from);
+      const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+      pc.current = new RTCPeerConnection(config);
+      localStream.current.getTracks().forEach(t => pc.current.addTrack(t, localStream.current));
+      pc.current.ontrack = e => remoteVideo.current.srcObject = e.streams[0];
+      pc.current.onicecandidate = e => e.candidate && socket.emit('ice-candidate', { candidate: e.candidate, to: from });
+      await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.current.createAnswer();
+      await pc.current.setLocalDescription(answer);
+      socket.emit('answer', { answer, to: from });
+    });
+
+    socket.on('ice-candidate', async (candidate) => {
       if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    socket.on('call-ended', () => navigate('/'));
+    socket.on('call-ended', () => {
+      endCall();
+    });
 
     return () => socket.off();
   }, [roomId]);
 
-  const acceptCall = async () => {
-    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-    pc.current = new RTCPeerConnection(config);
+  const acceptCall = () => {
+    socket.emit('accept-call');
+    setCalling(false);
+  };
 
-    localStream.current.getTracks().forEach(track => pc.current.addTrack(track, localStream.current));
-
-    pc.current.ontrack = (e) => {
-      remoteVideo.current.srcObject = e.streams[0];
-    };
-
-    pc.current.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit('ice-candidate', { candidate: e.candidate, to: incomingCall.from });
-      }
-    };
-
-    await pc.current.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-    const answer = await pc.current.createAnswer();
-    await pc.current.setLocalDescription(answer);
-    socket.emit('accept-call', { answer, to: incomingCall.from });
-    setIncomingCall(null);
+  const rejectCall = () => {
+    socket.emit('reject-call');
+    setCalling(false);
   };
 
   const endCall = () => {
     if (pc.current) pc.current.close();
     if (localStream.current) localStream.current.getTracks().forEach(t => t.stop());
-    socket.emit('end-call', { roomId });
+    socket.emit('end-call');
     navigate('/');
   };
 
   return (
-    <div style={{ textAlign: 'center', padding: '20px' }}>
+    <div style={s.container}>
       <h2>Sala: {roomId}</h2>
-      <video ref={localVideo} autoPlay muted playsInline style={{ width: '300px', borderRadius: '8px' }} />
-      {incomingCall ? (
-        <div style={{ background: '#fff3cd', padding: '15px', borderRadius: '8px', margin: '20px' }}>
-          <p>LLAMADA ENTRANTE!</p>
-          <button onClick={acceptCall} style={{ background: '#28a745', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' }}>
-            Aceptar
-          </button>
-          <button onClick={() => setIncomingCall(null)} style={{ background: '#dc3545', color: 'white', padding: '10px 20px', margin: '5px', border: 'none', borderRadius: '4px' }}>
-            Rechazar
-          </button>
+      <video ref={localVideo} autoPlay muted playsInline style={s.video} />
+
+      {calling && (
+        <div style={s.ring}>
+          <p>¡Llamada entrante!</p>
+          <button onClick={acceptCall} style={s.accept}>ACEPTAR</button>
+          <button onClick={rejectCall} style={s.reject}>RECHAZAR</button>
         </div>
-      ) : (
-        <p>Esperando llamada...</p>
       )}
-      <video ref={remoteVideo} autoPlay playsInline style={{ width: '300px', borderRadius: '8px', marginTop: '20px' }} />
-      <button onClick={endCall} style={{ marginTop: '20px', padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '4px' }}>
-        Salir
-      </button>
+
+      <video ref={remoteVideo} autoPlay playsInline style={s.video} />
+      <button onClick={endCall} style={s.hangup}>COLGAR</button>
     </div>
   );
+};
+
+const s = {
+  container: { textAlign: 'center', padding: 20 },
+  video: { width: 300, borderRadius: 12, margin: 10, border: '3px solid #007bff' },
+  ring: { background: '#fff3cd', padding: 20, borderRadius: 12, margin: 20 },
+  accept: { background: '#28a745', color: 'white', padding: '12px 24px', margin: 5, border: 'none', borderRadius: 8, fontWeight: 'bold' },
+  reject: { background: '#dc3545', color: 'white', padding: '12px 24px', margin: 5, border: 'none', borderRadius: 8, fontWeight: 'bold' },
+  hangup: { background: '#6c757d', color: 'white', padding: '12px 24px', margin: 20, border: 'none', borderRadius: 8 }
 };
 
 export default HostRoom;

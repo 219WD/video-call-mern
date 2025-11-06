@@ -10,10 +10,7 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
+const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors());
 app.use(express.json());
@@ -23,68 +20,78 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB conectado'))
   .catch(err => console.error('Error MongoDB:', err));
 
-// Almacén de salas: { roomId: { hostId: socket.id } }
-const rooms = {};
+// Almacén de salas
+const rooms = {}; // { roomId: { hostId, guestId, status: 'waiting' | 'calling' | 'connected' } }
 
 io.on('connection', (socket) => {
-  console.log('CONEXIÓN:', socket.id);
+  console.log('Conectado:', socket.id);
 
-  // Unirse a sala
   socket.on('join-room', ({ roomId, role }) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.role = role;
 
     if (role === 'host') {
-      rooms[roomId] = { hostId: socket.id };
-      console.log(`HOST unido: ${socket.id} → sala ${roomId}`);
-    } else if (role === 'guest') {
-      console.log(`GUEST unido: ${socket.id} → sala ${roomId}`);
-      // Notificar al host que hay un guest listo
-      const hostId = rooms[roomId]?.hostId;
-      if (hostId) {
-        io.to(hostId).emit('guest-joined');
-      }
-    }
-  });
-
-  // Guest envía oferta
-  socket.on('call-offer', ({ offer, roomId }) => {
-    const hostId = rooms[roomId]?.hostId;
-    if (hostId) {
-      console.log(`OFERTA de ${socket.id} → HOST ${hostId}`);
-      io.to(hostId).emit('incoming-call', { offer, from: socket.id });
+      rooms[roomId] = { hostId: socket.id, status: 'waiting' };
+      console.log(`HOST en sala ${roomId}`);
     } else {
-      console.log(`ERROR: No hay host en sala ${roomId}`);
-      socket.emit('error', { message: 'Host no disponible' });
+      rooms[roomId] = rooms[roomId] || {};
+      rooms[roomId].guestId = socket.id;
+      rooms[roomId].status = 'calling';
+      console.log(`GUEST llama a sala ${roomId}`);
+      io.to(rooms[roomId].hostId).emit('ring'); // Suena el timbre
     }
   });
 
-  // Host acepta
-  socket.on('accept-call', ({ answer, to }) => {
-    console.log(`ANSWER de host ${socket.id} → guest ${to}`);
-    io.to(to).emit('call-accepted', { answer });
+  socket.on('accept-call', () => {
+    const room = rooms[socket.roomId];
+    if (room && room.guestId) {
+      room.status = 'connected';
+      io.to(room.guestId).emit('call-accepted');
+      console.log(`Llamada ACEPTADA en sala ${socket.roomId}`);
+    }
   });
 
-  // ICE
+  socket.on('reject-call', () => {
+    const room = rooms[socket.roomId];
+    if (room && room.guestId) {
+      io.to(room.guestId).emit('call-rejected');
+      delete rooms[socket.roomId];
+    }
+  });
+
+  socket.on('call-offer', ({ offer }) => {
+    const room = rooms[socket.roomId];
+    if (room && room.hostId) {
+      io.to(room.hostId).emit('offer', { offer, from: socket.id });
+    }
+  });
+
+  socket.on('answer', ({ answer, to }) => {
+    io.to(to).emit('answer', { answer });
+  });
+
   socket.on('ice-candidate', ({ candidate, to }) => {
-    io.to(to).emit('new-ice-candidate', candidate);
+    io.to(to).emit('ice-candidate', candidate);
   });
 
-  // Finalizar
-  socket.on('end-call', ({ roomId }) => {
-    io.to(roomId).emit('call-ended');
-    delete rooms[roomId];
+  socket.on('end-call', () => {
+    const room = rooms[socket.roomId];
+    if (room) {
+      io.to(room.hostId).emit('call-ended');
+      io.to(room.guestId).emit('call-ended');
+      delete rooms[socket.roomId];
+    }
   });
 
   socket.on('disconnect', () => {
-    console.log('DESCONECTADO:', socket.id);
-    if (socket.role === 'host' && socket.roomId) {
+    const room = Object.values(rooms).find(r => r.hostId === socket.id || r.guestId === socket.id);
+    if (room) {
+      io.to(room.hostId).emit('call-ended');
+      io.to(room.guestId).emit('call-ended');
       delete rooms[socket.roomId];
     }
-    if (socket.roomId) {
-      io.to(socket.roomId).emit('call-ended');
-    }
+    console.log('Desconectado:', socket.id);
   });
 });
 

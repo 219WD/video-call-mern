@@ -14,7 +14,6 @@ const VideoCall = () => {
   const localStream = useRef(null);
 
   useEffect(() => {
-    // Media
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
         localVideo.current.srcObject = stream;
@@ -22,19 +21,26 @@ const VideoCall = () => {
         setupWebRTC(stream);
       });
 
-    // Unirse como guest
     socket.emit('join-room', { roomId, role: 'guest' });
 
-    // Recibir answer
-    socket.on('call-accepted', async ({ answer }) => {
+    socket.on('call-accepted', () => {
+      console.log('Llamada aceptada');
+    });
+
+    socket.on('answer', async ({ answer }) => {
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
     });
 
-    socket.on('new-ice-candidate', async (candidate) => {
+    socket.on('ice-candidate', async (candidate) => {
       if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    socket.on('call-ended', () => navigate('/'));
+    socket.on('call-rejected', () => {
+      alert('Llamada rechazada');
+      endCall();
+    });
+
+    socket.on('call-ended', endCall);
 
     return () => socket.off();
   }, [roomId]);
@@ -42,45 +48,38 @@ const VideoCall = () => {
   const setupWebRTC = (stream) => {
     const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     pc.current = new RTCPeerConnection(config);
+    stream.getTracks().forEach(t => pc.current.addTrack(t, stream));
+    pc.current.ontrack = e => remoteVideo.current.srcObject = e.streams[0];
+    pc.current.onicecandidate = e => e.candidate && socket.emit('ice-candidate', { candidate: e.candidate, to: roomId });
 
-    stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
-
-    pc.current.ontrack = (e) => {
-      remoteVideo.current.srcObject = e.streams[0];
-    };
-
-    pc.current.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit('ice-candidate', { candidate: e.candidate, to: roomId });
-      }
-    };
-
-    // ENVÍA OFERTA INMEDIATA
     setTimeout(async () => {
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
-      socket.emit('call-offer', { offer, roomId });
-      console.log('OFERTA ENVIADA');
-    }, 1500);
+      socket.emit('call-offer', { offer });
+    }, 1000);
   };
 
   const endCall = () => {
     if (pc.current) pc.current.close();
     if (localStream.current) localStream.current.getTracks().forEach(t => t.stop());
-    socket.emit('end-call', { roomId });
+    socket.emit('end-call');
     navigate('/');
   };
 
   return (
-    <div style={{ textAlign: 'center', padding: '20px' }}>
+    <div style={s.container}>
       <h2>Llamando...</h2>
-      <video ref={localVideo} autoPlay muted playsInline style={{ width: '300px', borderRadius: '8px' }} />
-      <video ref={remoteVideo} autoPlay playsInline style={{ width: '300px', borderRadius: '8px', marginTop: '20px' }} />
-      <button onClick={endCall} style={{ marginTop: '20px', padding: '10px 20px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>
-        Colgar
-      </button>
+      <video ref={localVideo} autoPlay muted playsInline style={s.video} />
+      <video ref={remoteVideo} autoPlay playsInline style={s.video} />
+      <button onClick={endCall} style={s.hangup}>COLGAR</button>
     </div>
   );
+};
+
+const s = {
+  container: { textAlign: 'center', padding: 20 },
+  video: { width: 300, borderRadius: 12, margin: 10, border: '3px solid #28a745' },
+  hangup: { background: '#dc3545', color: 'white', padding: '12px 24px', margin: 20, border: 'none', borderRadius: 8 }
 };
 
 export default VideoCall;

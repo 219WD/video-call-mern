@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 
 const SOCKET_SERVER = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
-const socket = io(SOCKET_SERVER);
+const socket = io(SOCKET_SERVER, { transports: ['websocket'] });
 
 const HostRoom = () => {
   const { roomId } = useParams();
@@ -11,8 +11,7 @@ const HostRoom = () => {
   const localVideo = useRef();
   const remoteVideo = useRef();
   const pc = useRef(null);
-  const [calling, setCalling] = useState(false);
-  const [guestId, setGuestId] = useState(null);
+  const [ringing, setRinging] = useState(false);
   const localStream = useRef(null);
 
   useEffect(() => {
@@ -25,17 +24,20 @@ const HostRoom = () => {
     socket.emit('join-room', { roomId, role: 'host' });
 
     socket.on('ring', () => {
-      setCalling(true);
-      new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-tone-1057.mp3').play();
+      setRinging(true);
+      const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-tone-1057.mp3');
+      audio.loop = true;
+      audio.play().catch(() => {});
+      window.ringAudio = audio;
     });
 
     socket.on('offer', async ({ offer, from }) => {
-      setGuestId(from);
       const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
       pc.current = new RTCPeerConnection(config);
       localStream.current.getTracks().forEach(t => pc.current.addTrack(t, localStream.current));
       pc.current.ontrack = e => remoteVideo.current.srcObject = e.streams[0];
       pc.current.onicecandidate = e => e.candidate && socket.emit('ice-candidate', { candidate: e.candidate, to: from });
+
       await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.current.createAnswer();
       await pc.current.setLocalDescription(answer);
@@ -46,21 +48,24 @@ const HostRoom = () => {
       if (pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    socket.on('call-ended', () => {
-      endCall();
-    });
+    socket.on('call-ended', endCall);
 
-    return () => socket.off();
+    return () => {
+      if (window.ringAudio) window.ringAudio.pause();
+      socket.off();
+    };
   }, [roomId]);
 
   const acceptCall = () => {
     socket.emit('accept-call');
-    setCalling(false);
+    setRinging(false);
+    if (window.ringAudio) window.ringAudio.pause();
   };
 
   const rejectCall = () => {
     socket.emit('reject-call');
-    setCalling(false);
+    setRinging(false);
+    if (window.ringAudio) window.ringAudio.pause();
   };
 
   const endCall = () => {
@@ -71,31 +76,22 @@ const HostRoom = () => {
   };
 
   return (
-    <div style={s.container}>
+    <div style={{ textAlign: 'center', padding: 20 }}>
       <h2>Sala: {roomId}</h2>
-      <video ref={localVideo} autoPlay muted playsInline style={s.video} />
+      <video ref={localVideo} autoPlay muted playsInline style={{ width: 300, borderRadius: 12, margin: 10 }} />
 
-      {calling && (
-        <div style={s.ring}>
-          <p>¡Llamada entrante!</p>
-          <button onClick={acceptCall} style={s.accept}>ACEPTAR</button>
-          <button onClick={rejectCall} style={s.reject}>RECHAZAR</button>
+      {ringing && (
+        <div style={{ background: '#fff3cd', padding: 20, borderRadius: 12, margin: 20 }}>
+          <p style={{ fontSize: 24, fontWeight: 'bold' }}>LLAMADA ENTRANTE</p>
+          <button onClick={acceptCall} style={{ background: '#28a745', color: 'white', padding: '14px 28px', margin: 10, border: 'none', borderRadius: 8, fontSize: 18 }}>ACEPTAR</button>
+          <button onClick={rejectCall} style={{ background: '#dc3545', color: 'white', padding: '14px 28px', margin: 10, border: 'none', borderRadius: 8, fontSize: 18 }}>RECHAZAR</button>
         </div>
       )}
 
-      <video ref={remoteVideo} autoPlay playsInline style={s.video} />
-      <button onClick={endCall} style={s.hangup}>COLGAR</button>
+      <video ref={remoteVideo} autoPlay playsInline style={{ width: 300, borderRadius: 12, margin: 10 }} />
+      <button onClick={endCall} style={{ padding: '12px 24px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 8 }}>Salir</button>
     </div>
   );
-};
-
-const s = {
-  container: { textAlign: 'center', padding: 20 },
-  video: { width: 300, borderRadius: 12, margin: 10, border: '3px solid #007bff' },
-  ring: { background: '#fff3cd', padding: 20, borderRadius: 12, margin: 20 },
-  accept: { background: '#28a745', color: 'white', padding: '12px 24px', margin: 5, border: 'none', borderRadius: 8, fontWeight: 'bold' },
-  reject: { background: '#dc3545', color: 'white', padding: '12px 24px', margin: 5, border: 'none', borderRadius: 8, fontWeight: 'bold' },
-  hangup: { background: '#6c757d', color: 'white', padding: '12px 24px', margin: 20, border: 'none', borderRadius: 8 }
 };
 
 export default HostRoom;

@@ -65,7 +65,7 @@ const handleGoogleLogin = async () => {
     console.error('Error en login Google:', error);
     alert('Error al iniciar sesión con Google');
   }
-};
+}; 
 
 const loadGoogleSDK = () => {
   return new Promise((resolve) => {

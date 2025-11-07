@@ -14,4 +14,4 @@ const VisitSchema = new mongoose.Schema({
   duration: Number // duración en segundos para videollamadas
 });
 
-module.exports = mongoose.model('Visit', VisitSchema);
+module.exports = mongoose.model('Visit', VisitSchema); 

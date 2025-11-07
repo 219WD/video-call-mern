@@ -1,0 +1,8 @@
+{
+  "name": "video-call-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && npm run build",
+    "dev": "cd client && npm start"
+  }
+}

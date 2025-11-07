@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 
 const SOCKET_SERVER = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
 const socket = io(SOCKET_SERVER, { transports: ['websocket'] });

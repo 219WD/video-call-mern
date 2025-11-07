@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
-import api from './services/api';
 import { useNavigate } from 'react-router-dom';
+import api from './services/api';
 
 const Login = () => {
   const { login } = useAuth();
@@ -9,6 +9,8 @@ const Login = () => {
 
   const handleGoogleLogin = async () => {
     try {
+      console.log('🔐 Iniciando login con Google...');
+      
       // Cargar SDK de Google
       await loadGoogleSDK();
       
@@ -16,19 +18,25 @@ const Login = () => {
       const googleUser = await auth2.signIn();
       const token = googleUser.getAuthResponse().id_token;
       
+      console.log('✅ Token de Google obtenido');
+      
       // Enviar token al backend
       const response = await api.post('/auth/google', { token });
+      console.log('✅ Respuesta del backend recibida');
+      
       login(response.data.token, response.data.user);
-      navigate('/'); // Redirigir al dashboard después del login
+      navigate('/');
+      
     } catch (error) {
-      console.error('Error en login Google:', error);
-      alert('Error al iniciar sesión con Google. Por favor, intenta de nuevo.');
+      console.error('❌ Error en login Google:', error);
+      alert('Error al iniciar sesión con Google. Usa el modo demo.');
     }
   };
 
   const loadGoogleSDK = () => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (window.gapi) {
+        console.log('✅ Google SDK ya cargado');
         resolve();
         return;
       }
@@ -38,56 +46,52 @@ const Login = () => {
       script.async = true;
       script.defer = true;
       script.onload = () => {
+        console.log('✅ Google SDK cargado');
         window.gapi.load('auth2', () => {
-          window.gapi.auth2.init({
-            client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
-            scope: 'email profile'
-          });
-          resolve();
+          try {
+            window.gapi.auth2.init({
+              client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+              scope: 'email profile'
+            });
+            console.log('✅ Google Auth inicializado');
+            resolve();
+          } catch (error) {
+            console.error('❌ Error inicializando Google Auth:', error);
+            reject(error);
+          }
         });
       };
+      script.onerror = reject;
       document.head.appendChild(script);
     });
   };
 
-  // Versión de respaldo si el SDK falla
-  const handleGoogleLoginFallback = async () => {
-    try {
-      // Implementación simple sin SDK (para desarrollo)
-      const response = await api.post('/auth/google', {
-        token: 'dev-token-' + Date.now()
-      });
-      login(response.data.token, response.data.user);
-      navigate('/');
-    } catch (error) {
-      console.error('Error en login de desarrollo:', error);
-      alert('Modo desarrollo: Login simulado exitoso');
-      // Simular login exitoso para desarrollo
-      login('dev-token', {
-        id: '1',
-        name: 'Usuario Demo',
-        email: 'demo@ejemplo.com',
-        picture: '',
-        role: 'host'
-      });
-      navigate('/');
-    }
+  const handleDemoLogin = () => {
+    console.log('🎮 Iniciando modo demo...');
+    const mockUser = {
+      id: 'user-' + Date.now(),
+      name: 'Usuario Demo',
+      email: 'demo@ejemplo.com',
+      picture: '',
+      role: 'host'
+    };
+    
+    login('demo-token-' + Date.now(), mockUser);
+    setTimeout(() => navigate('/'), 100);
   };
 
   return (
     <div style={styles.container}>
       <div style={styles.loginCard}>
         <div style={styles.header}>
-          <h1 style={styles.title}>Bienvenido</h1>
-          <p style={styles.subtitle}>Inicia sesión para gestionar tus visitas</p>
+          <h1 style={styles.title}>Bienvenido a QR Door</h1>
+          <p style={styles.subtitle}>Sistema de videollamadas por QR</p>
         </div>
 
         <div style={styles.loginOptions}>
           <button 
             onClick={handleGoogleLogin}
             style={styles.googleButton}
-            onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
-            onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
           >
             <div style={styles.googleButtonContent}>
               <svg style={styles.googleIcon} viewBox="0 0 24 24">
@@ -100,21 +104,25 @@ const Login = () => {
             </div>
           </button>
 
+          <div style={styles.divider}>
+            <span style={styles.dividerText}>o</span>
+          </div>
+
           <button 
-            onClick={handleGoogleLoginFallback}
+            onClick={handleDemoLogin}
             style={styles.demoButton}
           >
-            Modo Desarrollo (Sin Google)
+            🚀 Modo Demo (Sin Google)
           </button>
         </div>
 
         <div style={styles.features}>
-          <h3 style={styles.featuresTitle}>¿Qué puedes hacer?</h3>
+          <h3 style={styles.featuresTitle}>Funcionalidades:</h3>
           <ul style={styles.featuresList}>
-            <li style={styles.featureItem}>🎯 Generar tu QR personal único</li>
-            <li style={styles.featureItem}>📞 Recibir videollamadas de visitantes</li>
-            <li style={styles.featureItem}>📊 Ver historial de visitas</li>
-            <li style={styles.featureItem}>💬 Recibir mensajes cuando no estés</li>
+            <li style={styles.featureItem}>🎯 QR único permanente</li>
+            <li style={styles.featureItem}>📞 Videollamadas en tiempo real</li>
+            <li style={styles.featureItem}>📊 Historial de visitas</li>
+            <li style={styles.featureItem}>💬 Sistema de mensajes</li>
           </ul>
         </div>
       </div>
@@ -146,7 +154,7 @@ const styles = {
     marginBottom: 30
   },
   title: {
-    fontSize: '2.5rem',
+    fontSize: '2.2rem',
     fontWeight: 'bold',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     WebkitBackgroundClip: 'text',
@@ -187,16 +195,28 @@ const styles = {
     fontWeight: '600',
     color: '#333'
   },
+  divider: {
+    position: 'relative',
+    margin: '20px 0',
+    textAlign: 'center'
+  },
+  dividerText: {
+    background: 'white',
+    padding: '0 15px',
+    color: '#666',
+    fontSize: '0.9rem'
+  },
   demoButton: {
     width: '100%',
-    padding: '12px 20px',
-    background: 'transparent',
-    border: '2px solid #667eea',
+    padding: '15px 20px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    border: 'none',
     borderRadius: 12,
     cursor: 'pointer',
-    color: '#667eea',
-    fontSize: '0.9rem',
-    transition: 'all 0.3s ease'
+    color: 'white',
+    fontSize: '1rem',
+    fontWeight: 'bold',
+    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)'
   },
   features: {
     borderTop: '1px solid #f0f0f0',

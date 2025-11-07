@@ -8,19 +8,38 @@ const HostDashboard = () => {
   const [qrCode, setQrCode] = useState(null);
   const [visits, setVisits] = useState([]);
   const [stats, setStats] = useState({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadQRCode();
-    loadVisits();
-    loadStats();
+    loadInitialData();
   }, []);
+
+  const loadInitialData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        loadQRCode(),
+        loadVisits(), 
+        loadStats()
+      ]);
+    } catch (error) {
+      console.log('Error cargando datos iniciales:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadQRCode = async () => {
     try {
       const response = await api.get('/qr/my-qr');
       setQrCode(response.data);
     } catch (error) {
-      console.log('No hay QR generado');
+      // Error 401 es normal si no hay QR generado
+      if (error.response?.status === 401) {
+        console.log('No autenticado para QR - probablemente no existe');
+      } else {
+        console.log('Error cargando QR:', error.message);
+      }
     }
   };
 
@@ -29,7 +48,11 @@ const HostDashboard = () => {
       const response = await api.get('/visits/history');
       setVisits(response.data);
     } catch (error) {
-      console.error('Error cargando visitas:', error);
+      if (error.response?.status === 401) {
+        console.log('No autenticado para visitas - probablemente no hay datos');
+      } else {
+        console.log('Error cargando visitas:', error.message);
+      }
     }
   };
 
@@ -38,7 +61,11 @@ const HostDashboard = () => {
       const response = await api.get('/visits/stats');
       setStats(response.data);
     } catch (error) {
-      console.error('Error cargando stats:', error);
+      if (error.response?.status === 401) {
+        console.log('No autenticado para stats - probablemente no hay datos');
+      } else {
+        console.log('Error cargando stats:', error.message);
+      }
     }
   };
 
@@ -48,12 +75,24 @@ const HostDashboard = () => {
         title: 'Mi QR de Visitas'
       });
       setQrCode(response.data);
+      alert('QR generado exitosamente!');
     } catch (error) {
       console.error('Error generando QR:', error);
+      alert('Error generando QR. Intenta nuevamente.');
     }
   };
 
   const qrUrl = qrCode ? `${window.location.origin}/join/${qrCode.qrCode}` : '';
+
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loading}>
+          <h2>Cargando...</h2>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -82,9 +121,12 @@ const HostDashboard = () => {
       <div style={styles.qrSection}>
         <h2>Mi QR Personal</h2>
         {!qrCode ? (
-          <button onClick={generateQR} style={styles.generateButton}>
-            Generar Mi QR Único
-          </button>
+          <div>
+            <p style={styles.noQR}>No tienes un QR generado aún</p>
+            <button onClick={generateQR} style={styles.generateButton}>
+              Generar Mi QR Único
+            </button>
+          </div>
         ) : (
           <div style={styles.qrContainer}>
             <QRCodeCanvas value={qrUrl} size={200} />
@@ -100,7 +142,7 @@ const HostDashboard = () => {
       <div style={styles.history}>
         <h2>Historial de Visitas</h2>
         {visits.length === 0 ? (
-          <p>No hay visitas registradas</p>
+          <p>No hay visitas registradas aún</p>
         ) : (
           <div style={styles.visitsList}>
             {visits.map((visit, index) => (
@@ -118,7 +160,7 @@ const HostDashboard = () => {
                 <span style={{
                   ...styles.status,
                   ...(visit.status === 'accepted' ? styles.accepted : 
-                      visit.status === 'rejected' ? styles.rejected : styles.message)
+                      visit.status === 'rejected' ? styles.rejected : styles.messageStatus)
                 }}>
                   {visit.status}
                 </span>
@@ -134,10 +176,12 @@ const HostDashboard = () => {
 const styles = {
   container: { maxWidth: 800, margin: '0 auto', padding: 20 },
   header: { textAlign: 'center', marginBottom: 40 },
+  loading: { textAlign: 'center', padding: 40 },
   stats: { display: 'flex', gap: 20, marginBottom: 40, justifyContent: 'center' },
   statCard: { background: '#f8f9fa', padding: 20, borderRadius: 12, textAlign: 'center', flex: 1 },
   statNumber: { fontSize: 32, fontWeight: 'bold', color: '#007bff', margin: 0 },
   qrSection: { textAlign: 'center', marginBottom: 40, padding: 30, background: '#fff', borderRadius: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' },
+  noQR: { color: '#666', marginBottom: 20 },
   generateButton: { padding: '15px 30px', fontSize: 18, background: '#007bff', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' },
   qrContainer: { display: 'inline-block' },
   qrCode: { marginTop: 10, fontSize: 14, fontFamily: 'monospace' },
@@ -152,7 +196,7 @@ const styles = {
   status: { fontSize: 12, padding: '2px 8px', borderRadius: 12, display: 'inline-block' },
   accepted: { background: '#d4edda', color: '#155724' },
   rejected: { background: '#f8d7da', color: '#721c24' },
-  message: { background: '#fff3cd', color: '#856404' }
+  messageStatus: { background: '#fff3cd', color: '#856404' }
 };
 
 export default HostDashboard;

@@ -6,7 +6,7 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
-// Interceptor para agregar token a todas las requests
+// SOLO el interceptor de request para agregar el token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -15,17 +15,5 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor para manejar errores de autenticación
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
+// NO hay interceptor de respuesta - los errores se manejan en cada componente
 export default api;

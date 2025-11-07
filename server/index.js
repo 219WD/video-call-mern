@@ -13,40 +13,24 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// Configuración CORS mejorada
+// Configuración CORS simplificada y funcional
 const allowedOrigins = [
   'https://qrdoor.vercel.app',
+  'https://qrdoor-git-main-219wds-projects.vercel.app',
+  'https://qrdoor-219wds-projects.vercel.app',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
   'http://localhost:5000',
   'http://127.0.0.1:5000'
 ];
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Permitir requests sin origin (como mobile apps o curl)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('CORS bloqueado para origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+// Configuración CORS simple que funciona
+app.use(cors({
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-};
-
-app.use(cors(corsOptions));
-
-// Middleware para log de requests (opcional, para debug)
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
-  next();
-});
-
-// Manejar preflight requests explícitamente
-app.options('*', cors(corsOptions));
+}));
 
 app.use(express.json());
 app.use('/api/auth', authRoutes);
@@ -62,23 +46,21 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Configuración Socket.io con CORS específico
+// Configuración Socket.io
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
-    credentials: true,
-    transports: ['websocket', 'polling']
+    credentials: true
   },
-  pingTimeout: 60000,
-  pingInterval: 25000
+  pingTimeout: 60000
 });
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB conectado'))
   .catch(err => console.error('❌ Error MongoDB:', err));
 
-// Almacén mejorado de salas
+// Almacén de salas
 const rooms = {};
 
 io.on('connection', (socket) => {
@@ -110,7 +92,7 @@ io.on('connection', (socket) => {
         
         console.log(`🔔 GUEST ${socket.id} llama a HOST ${rooms[roomId].hostId}`);
         
-        // Notificación push mejorada al host
+        // Notificación al host
         io.to(rooms[roomId].hostId).emit('ring', {
           guest: userData,
           timestamp: new Date(),
@@ -243,6 +225,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
-  console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ CORS habilitado para: ${allowedOrigins.join(', ')}`);
 });

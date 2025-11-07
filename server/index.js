@@ -25,10 +25,8 @@ const allowedOrigins = [
 // CORS que permite TODAS las URLs de Vercel (preview y main)
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir solicitudes sin origin (como Postman o móviles)
     if (!origin) return callback(null, true);
 
-    // Permitir localhost y Vercel completo
     if (
       origin.includes('localhost') ||
       origin.includes('vercel.app') ||
@@ -37,8 +35,7 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Bloquear el resto
-    console.warn(`🚫 CORS bloqueado desde: ${origin}`);
+    console.warn(`CORS bloqueado desde: ${origin}`);
     callback(new Error('No permitido por CORS'));
   },
   credentials: true,
@@ -56,8 +53,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/visits', visitRoutes);
 app.use('/api/qr', qrRoutes);
 
-// Health check
-app.get('/health', (09, res) => {
+// Health check → ¡CORREGIDO! Ya no hay "09"
+app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
@@ -95,7 +92,7 @@ const io = new Server(server, {
 
 // ==================== MONGO DB ====================
 if (!process.env.MONGO_URI) {
-  console.error('❌ MONGO_URI no está definido en .env');
+  console.error('MONGO_URI no está definido en .env');
   process.exit(1);
 }
 
@@ -103,17 +100,17 @@ mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-  .then(() => console.log('✅ MongoDB conectado'))
+  .then(() => console.log('MongoDB conectado'))
   .catch(err => {
-    console.error('❌ Error conectando a MongoDB:', err.message);
+    console.error('Error conectando a MongoDB:', err.message);
     process.exit(1);
   });
 
 // ==================== SALAS Y SOCKETS ====================
-const rooms = {}; // { roomId: { hostId, guestId, status, hostData, guestData } }
+const rooms = {};
 
 io.on('connection', (socket) => {
-  console.log('🟢 NUEVA CONEXIÓN:', socket.id);
+  console.log('NUEVA CONEXIÓN:', socket.id);
 
   socket.on('join-room', async ({ roomId, role, userData }) => {
     try {
@@ -128,7 +125,7 @@ io.on('connection', (socket) => {
           status: 'waiting',
           hostData: userData || { name: 'Anónimo' }
         };
-        console.log(`🏠 HOST unido a sala ${roomId} → ${socket.id}`);
+        console.log(`HOST unido a sala ${roomId} → ${socket.id}`);
       } else if (role === 'guest') {
         if (!rooms[roomId]) {
           socket.emit('error', { message: 'Sala no encontrada o expirada' });
@@ -139,7 +136,7 @@ io.on('connection', (socket) => {
         rooms[roomId].guestData = userData || { name: 'Visitante' };
         rooms[roomId].status = 'ringing';
 
-        console.log(`🔔 GUEST ${socket.id} llama a HOST ${rooms[roomId].hostId}`);
+        console.log(`GUEST ${socket.id} llama a HOST ${rooms[roomId].hostId}`);
 
         io.to(rooms[roomId].hostId).emit('ring', {
           guest: rooms[roomId].guestData,
@@ -148,7 +145,7 @@ io.on('connection', (socket) => {
         });
       }
     } catch (error) {
-      console.error('❌ Error en join-room:', error);
+      console.error('Error en join-room:', error);
       socket.emit('error', { message: 'Error interno del servidor' });
     }
   });
@@ -156,7 +153,7 @@ io.on('connection', (socket) => {
   socket.on('call-offer', ({ offer }) => {
     const room = rooms[socket.roomId];
     if (room?.hostId) {
-      console.log(`📞 OFERTA → HOST ${room.hostId}`);
+      console.log(`OFERTA → HOST ${room.hostId}`);
       io.to(room.hostId).emit('offer', {
         offer,
         from: socket.id,
@@ -166,7 +163,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('answer', ({ answer, to }) => {
-    console.log(`📨 ANSWER → GUEST ${to}`);
+    console.log(`ANSWER → GUEST ${to}`);
     io.to(to).emit('answer', { answer });
   });
 
@@ -187,10 +184,10 @@ io.on('connection', (socket) => {
           status: 'accepted',
           timestamp: new Date()
         });
-        console.log(`✅ Llamada ACEPTADA en sala ${socket.roomId}`);
+        console.log(`Llamada ACEPTADA en sala ${socket.roomId}`);
         io.to(room.guestId).emit('call-accepted');
       } catch (err) {
-        console.error('❌ Error registrando visita aceptada:', err);
+        console.error('Error registrando visita aceptada:', err);
       }
     }
   });
@@ -207,10 +204,10 @@ io.on('connection', (socket) => {
           status: 'rejected',
           timestamp: new Date()
         });
-        console.log(`❌ Llamada RECHAZADA en sala ${socket.roomId}`);
+        console.log(`Llamada RECHAZADA en sala ${socket.roomId}`);
         io.to(room.guestId).emit('call-rejected');
       } catch (err) {
-        console.error('❌ Error registrando rechazo:', err);
+        console.error('Error registrando rechazo:', err);
       } finally {
         delete rooms[socket.roomId];
       }
@@ -230,7 +227,7 @@ io.on('connection', (socket) => {
           status: 'message_left',
           timestamp: new Date()
         });
-        console.log(`💬 Mensaje dejado en sala ${socket.roomId} por ${name}`);
+        console.log(`Mensaje dejado en sala ${socket.roomId} por ${name}`);
 
         if (room.hostId) {
           io.to(room.hostId).emit('new-message', {
@@ -240,7 +237,7 @@ io.on('connection', (socket) => {
           });
         }
       } catch (err) {
-        console.error('❌ Error guardando mensaje:', err);
+        console.error('Error guardando mensaje:', err);
       }
     }
   });
@@ -258,7 +255,7 @@ io.on('connection', (socket) => {
   socket.on('end-call', () => {
     const room = rooms[socket.roomId];
     if (room) {
-      console.log(`📞 Llamada TERMINADA en sala ${socket.roomId}`);
+      console.log(`Llamada TERMINADA en sala ${socket.roomId}`);
       if (room.hostId) io.to(room.hostId).emit('call-ended');
       if (room.guestId) io.to(room.guestId).emit('call-ended');
       delete rooms[socket.roomId];
@@ -266,7 +263,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('🔴 DESCONECTADO:', socket.id, 'Razón:', reason);
+    console.log('DESCONECTADO:', socket.id, 'Razón:', reason);
     const room = Object.values(rooms).find(r => 
       r.hostId === socket.id || r.guestId === socket.id
     );
@@ -275,20 +272,18 @@ io.on('connection', (socket) => {
       const other = socket.id === room.hostId ? room.guestId : room.hostId;
       if (other) io.to(other).emit('call-ended');
       delete rooms[socket.roomId];
-      console.log(`🧹 Sala ${socket.roomId} eliminada por desconexión`);
+      console.log(`Sala ${socket.roomId} eliminada por desconexión`);
     }
   });
 });
 
 // ==================== LIMPIEZA PERIÓDICA DE SALAS HUÉRFANAS ====================
 setInterval(() => {
-  const now = Date.now();
   Object.keys(rooms).forEach(roomId => {
     const room = rooms[roomId];
-    // Si no tiene host o guest después de 10 minutos → borrar
     if (!room.hostId || !io.sockets.sockets.get(room.hostId)) {
       delete rooms[roomId];
-      console.log(`🧹 Sala huérfana eliminada: ${roomId}`);
+      console.log(`Sala huérfana eliminada: ${roomId}`);
     }
   });
 }, 600000); // Cada 10 minutos
@@ -296,8 +291,8 @@ setInterval(() => {
 // ==================== INICIO DEL SERVIDOR ====================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor QR Door ejecutándose en puerto ${PORT}`);
-  console.log(`✅ Entorno: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✅ CORS habilitado para Vercel + localhost`);
-  console.log(`🔗 URL: ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}`);
+  console.log(`Servidor QR Door ejecutándose en puerto ${PORT}`);
+  console.log(`Entorno: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`CORS habilitado para Vercel + localhost`);
+  console.log(`URL: ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}`);
 });

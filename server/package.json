@@ -1,13 +1,11 @@
 {
-  "name": "video-call-mern",
+  "name": "video-call-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Backend for video call app",
   "main": "index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "nodemon server/index.js",
-    "build-client": "cd client && npm install && npm run build",
-    "postinstall": "npm run build-client"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
@@ -27,3 +25,4 @@
     "nodemon": "^3.1.10"
   }
 }
+

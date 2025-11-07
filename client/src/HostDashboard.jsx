@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
+import { useAuth } from './contexts/AuthContext';
+import api from './services/api';
 
 const HostDashboard = () => {
   const { user } = useAuth();

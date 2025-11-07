@@ -24,7 +24,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
+    if (!origin) return callback(null, true); // <-- muy importante
     if (
       origin.includes('localhost') ||
       origin.includes('vercel.app') ||
@@ -39,6 +39,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
 
 // ==================== MIDDLEWARES ====================
 app.use(express.json({ limit: '10mb' }));
